@@ -1,0 +1,9 @@
+/*.jou
+/*.log
+/*.png
+/*.str
+/sources/*.tcl.raw
+/workspace/
+/workspace.bak/
+.Xil/
+/run-*
