@@ -57,9 +57,7 @@ if (!defined $OPT_DO_RUN) {
 	exit(0);
 }
 
-my $VVU = $VIVADO_VERSION;
-$VVU =~ s/\./_/g;
-open(GETENV, '-|', 'bash', '-c', sprintf('export HOME="$(pwd)"; . /afs/hep.wisc.edu/cms/sw/Xilinx_%s/Vivado/%s/settings64.sh; set', $VVU, $VIVADO_VERSION));
+open(GETENV, '-|', 'bash', '-c', sprintf('export HOME="$(pwd)"; . /afs/hep.wisc.edu/cms/sw/Xilinx/Vivado/%s/settings64.sh; set', $VIVADO_VERSION));
 while (<GETENV>) {
 	chomp;
 	next unless /^([^=]+)=(.*)$/;
