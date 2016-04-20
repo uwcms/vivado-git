@@ -131,6 +131,14 @@ like so, which should be committed to your repository:
 echo '2014.4' > RepoVivadoVersion
 ```
 
+These scripts are presently supported with Vivado 2014.4 only.  Prior Vivado
+upgrades have necessitated modifications, however it may be reasonable to expect
+that Vivado's TCL project export feature becomes stabler as versions pass since
+its initial release and the initial release of these scripts.  Be sure to
+carefully monitor your initial experience with these scripts when used with
+other Vivado versions.
+
+
 ### Updates
 
 This project will continue to be updated and maintained.  These updates will NOT
