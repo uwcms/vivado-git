@@ -51,7 +51,7 @@ for my $ProjectPath (glob("workspace/*/*.xpr")) {
 	close(VIVADO);
 
 	if (WEXITSTATUS($?)) {
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Vivado exited with an unexpected status code after project export: %s.  Aborting.  The project has NOT been exported or updated!", WEXITSTATUS($?)) };
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Vivado exited with an unexpected status code after project export: %s.  Aborting.  The project has NOT been exported or updated!", WEXITSTATUS($?)) };
 		unlink('.exported.tcl');
 		next;
 	}
@@ -72,7 +72,11 @@ for my $ProjectPath (glob("workspace/*/*.xpr")) {
 		printf "~~~ MESSAGES FOR PROJECT %s\n", $ProjectCanonicalName;
 		printf "~~~\n";
 		for my $Message (@{$MESSAGES{$ProjectCanonicalName}}) {
-			printf "~~~ %s: %s\n", $Message->{Severity}, $Message->{Message};
+			if ($DEBUG) {
+				printf "~~~ [%4d] %s: %s\n", $Message->{Line}, $Message->{Severity}, $Message->{Message};
+			} else {
+				printf "~~~ %s: %s\n", $Message->{Severity}, $Message->{Message};
+			}
 		}
 		printf "~~~\n";
 	}
@@ -92,7 +96,11 @@ for my $ProjectCanonicalName (keys %MESSAGES) {
 		printf "~~~ MESSAGES FOR PROJECT %s\n", $ProjectCanonicalName;
 		printf "~~~\n";
 		for my $Message (@{$MESSAGES{$ProjectCanonicalName}}) {
-			printf "~~~ %s: %s\n", $Message->{Severity}, $Message->{Message};
+			if ($DEBUG) {
+				printf "~~~ [%4d] %s: %s\n", $Message->{Line}, $Message->{Severity}, $Message->{Message};
+			} else {
+				printf "~~~ %s: %s\n", $Message->{Severity}, $Message->{Message};
+			}
 			$MessageTotals{$Message->{Severity}} = 0 unless exists($MessageTotals{$Message->{Severity}});
 			$MessageTotals{$Message->{Severity}}++;
 			$Worry++ if ($Message->{Hazard});
@@ -102,13 +110,15 @@ for my $ProjectCanonicalName (keys %MESSAGES) {
 }
 if (grep { $_ } values %MessageTotals) {
 	printf "~"x80 ."\n";
+	printf "\n";
+	system("git", "status");
+	printf "\n";
 	for my $MessageType (sort keys %MessageTotals) {
 		printf "~~~ %u %s messages\n", $MessageTotals{$MessageType}, $MessageType;
 	}
+	printf "\n";
 	printf "~~~ Please review them carefully and make sure none are dangerous before committing.\n";
 	printf "~~~ Always review 'git status' before committing!.\n";
-	printf "\n";
-	system("git", "status");
 	exit(2);
 }
 else {
@@ -128,12 +138,12 @@ sub process_tcl {
 	$PROJECT_REPO_DEPS{$ProjectCanonicalName} = [];
 
 	if (!open(TCLOUT, '>', $TclOutFile)) {
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  The project has NOT been exported or updated!", $TclOutFile) };
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  The project has NOT been exported or updated!", $TclOutFile) };
 		unlink($TclOutFile);
 		return;
 	}
 	if (!open(TCLIN, '<', $TclInFile)) {
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  The project has NOT been exported or updated!", $TclInFile) };
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  The project has NOT been exported or updated!", $TclInFile) };
 		close(TCLOUT);
 		unlink($TclOutFile);
 		return;
@@ -185,33 +195,33 @@ sub process_tcl {
 				my $File = get_path($RawFile, 1, $ProjectCanonicalName, 0, undef);
 
 				if ($File =~ m!\.srcs/[^ /]+/bd/([^ /]+)/\1.bd$!) {
-					push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'INFO', Message => sprintf("Discarding source file (Block Designs exported separately): %s", $File) };
+					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'INFO', Message => sprintf("Discarding source file (Block Designs exported separately): %s", $File) };
 				}
 				elsif ($File =~ m!\.srcs/[^ /]+/bd/([^ /]+)/hdl/\1_wrapper\.v(?:hd)?$!) {
-					push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'INFO', Message => sprintf("Discarding source file (Block Design auto-wrapper will be regenerated): %s", $File) };
+					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'INFO', Message => sprintf("Discarding source file (Block Design auto-wrapper will be regenerated): %s", $File) };
 					push @Discarded_BD_Wrappers, $1;
 					$SourcesIndex{abs_path($File)} = undef;
 				}
 				else {
 					my $Target = get_path($RawFile, 1, $ProjectCanonicalName, 1, undef);
 					if (!-e $File) {
-						push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'WARNING', Message => sprintf("Unable to locate/copy specified source file: %s", $1) };
+						push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("Unable to locate/copy specified source file: %s", $1) };
 					}
 					else {
 						if ($File ne $Target) {
 							if (exists($TargetsIndex{abs_path($Target)}) && $TargetsIndex{abs_path($Target)} != abs_path($File)) {
 								$Target = get_new_file_target($Target);
-								push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL WARNING', Message => sprintf("DUPLICATE TARGET FILE in repository sources: \"%s\" is being remapped to \"%s\" in violation of the pattern.  The scripts MAY not perfectly handle this case through future iterations of checkin.  Be attentive!", $File, $Target) };
+								push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL WARNING', Message => sprintf("DUPLICATE TARGET FILE in repository sources: \"%s\" is being remapped to \"%s\" in violation of the pattern.  The scripts MAY not perfectly handle this case through future iterations of checkin.  Be attentive!", $File, $Target) };
 							}
 
 							my $TargetDir = $Target;
 							$TargetDir =~ s#/[^/]+$##;
 							system('mkdir', '-p', '--', $TargetDir);
 							system('cp', '-a', '--', $File, $Target);
-							push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'INFO', Message => sprintf("Relocating file to repository sources: %s", $File) };
+							push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'INFO', Message => sprintf("Relocating file to repository sources: %s", $File) };
 						}
 
-						push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'DEBUG INFO', Message => sprintf("Registering Target: %s", $Target) } if ($DEBUG);
+						push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'DEBUG INFO', Message => sprintf("Registering Target: %s", $Target) } if ($DEBUG);
 						$SourcesIndex{abs_path($File)} = abs_path($Target);
 						$TargetsIndex{abs_path($Target)} = abs_path($File);
 					}
@@ -238,7 +248,7 @@ sub process_tcl {
 				}
 				else {
 					$KeepLine = 0;
-					push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL WARNING', Message => sprintf("Unable to locate/register specified source file \"%s\".  File excluded.", $1) };
+					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL WARNING', Message => sprintf("Unable to locate/register specified source file \"%s\".  File excluded.", $File) };
 				}
 			}
 			elsif ($Line =~ /^add_files /) {
@@ -260,7 +270,7 @@ sub process_tcl {
 						$Line = sprintf("add_files -norecurse -fileset [get_filesets %s] \$files", $1);
 					}
 					else {
-						push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'WARNING', Message => sprintf("Unable to parse import_files fileset parameter in \"%s\".  Files will be imported, not added.  Report the bug.", $Line) };
+						push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("Unable to parse import_files fileset parameter in \"%s\".  Files will be imported, not added.  Report the bug.", $Line) };
 					}
 				}
 				$FileList_State = 0; # And finish.
@@ -343,7 +353,7 @@ sub process_tcl {
 			my @NewRepoPaths;
 			foreach my $RepoPath (@RepoPaths) {
 				unless ($RepoPath =~ /^\[file normalize "([^"]+)"\]$/) {
-					push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'WARNING', Message => sprintf("Ignoring unparsable ip_repo_path: %s", $RepoPath) };
+					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("Ignoring unparsable ip_repo_path: %s", $RepoPath) };
 					next;
 				}
 				$RepoPath = get_path($1,1,$ProjectCanonicalName,0,undef);
@@ -351,7 +361,7 @@ sub process_tcl {
 				$RepoPath =~ s/^workspace\//sources\//;
 
 				if (!($RepoPath =~ m!^sources/([^/]+)(?:/.*)?$!)) {
-					push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'WARNING', Message => sprintf("External ip_repo_path \"%s\" will NOT be processed! Strongly consider relocating it to workspace/ip_project", $RepoPath) };
+					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("External ip_repo_path \"%s\" will NOT be processed! Strongly consider relocating it to workspace/ip_project", $RepoPath) };
 				}
 				elsif ($1 ne $ProjectCanonicalName) {
 					#push @{$PROJECT_REPO_DEPS{$ProjectCanonicalName}}, $1;
@@ -395,7 +405,7 @@ sub process_tcl {
 		$WSPath =~ s/^sources/workspace/;
 		if ($WSPath ne $ComponentPath && -d sprintf("%s/xgui/", $WSPath)) {
 			system('rsync', '-ahv', '--del', sprintf("%s/xgui/", $WSPath), sprintf("%s/xgui/", $ComponentPath));
-			push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'INFO', Message => sprintf("Relocating directory to repository sources: workspace/%s/xgui", $ProjectCanonicalName) };
+			push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'INFO', Message => sprintf("Relocating directory to repository sources: workspace/%s/xgui", $ProjectCanonicalName) };
 		}
 
 		process_componentxml($ComponentXML, '.component.xml', $ProjectCanonicalName, $ComponentPath, \%TargetsIndex);
@@ -412,7 +422,7 @@ sub process_tcl {
 		chomp $File;
 		$File = abs_path($File);
 		unlink($File) unless (exists($TargetsIndex{$File}));
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 0, Severity => 'DEBUG WARNING', Message => sprintf("Unlinked \"%s\".", $File) } if ($DEBUG && !exists($TargetsIndex{$File}));
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 0, Severity => 'DEBUG WARNING', Message => sprintf("Unlinked \"%s\".", $File) } if ($DEBUG && !exists($TargetsIndex{$File}));
 	}
 	close(FIND);
 	system('find', sprintf('sources/%s', $ProjectCanonicalName), '-depth', '-type', 'd', '-exec', 'rmdir', '--ignore-fail-on-non-empty', '{}', ';');
@@ -425,12 +435,12 @@ sub process_componentxml {
 	my $TargetsIndex = shift;
 
 	if (!open(XMLOUT, '>', $XML_Out)) {
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  This project's IP package may be unusuable!", $XML_Out) };
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  This project's IP package may be unusuable!", $XML_Out) };
 		unlink($XML_Out);
 		return;
 	}
 	if (!open(XMLIN, '<', $XML_In)) {
-		push @{$MESSAGES{$ProjectCanonicalName}}, { Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  This project's IP package may be unusable!", $XML_In) };
+		push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'CRITICAL ERROR', Message => sprintf("Unable to open intermediate file \"%s\".  Aborting.  This project's IP package may be unusable!", $XML_In) };
 		close(TCLOUT);
 		unlink($XML_Out);
 		return;
@@ -454,6 +464,25 @@ sub process_componentxml {
 	}
 }
 
+sub _get_path_update_for_xcix {
+	# Vivado 2016.1 will report files as /ip/module/module.xci when they are actually packaged as /ip/module.xcix
+	my $Path = shift;
+	printf("XCIX: IN\t%s\n", $Path);
+	return $Path unless $Path =~ /\.xci$/;
+	printf("XCIX: XCI\t%s\n", $Path);
+	return $Path if -e $Path;
+	printf("XCIX: !-e\t%s\n", $Path);
+	my $AltPath = $Path;
+	$AltPath =~ s!/ip/([^/]+)/\g1\.xci!/ip/$1.xcix!;
+	return $AltPath if -e ($AltPath);
+	printf("XCIX: !-e\t%s\n", $AltPath);
+	my $SourcePath = $AltPath;
+	$SourcePath =~ s!(^|/)workspace/!$1sources/!;
+	return $AltPath if -e ($SourcePath);
+	printf("XCIX: !-e.x\t%s\n", $SourcePath);
+	return $Path;
+}
+
 sub get_path {
 	my $Path = shift;
 	my $Relative = shift;
@@ -465,11 +494,13 @@ sub get_path {
 	$Path =~ s/\$proj_dir\//workspace\/$Project\//;
 
 	my $OrigPath = $Path;
+	$Path = _get_path_update_for_xcix($Path) if defined($Path);
 	$Path = abs_path($Path);
 	if (!defined($Path) || ! -e($Path)) {
 		if (defined $SourcesIndex) {
 			foreach my $SourcePath (keys %$SourcesIndex) {
 				if ($SourcePath =~ /(^|\/|(?=\/))\Q$OrigPath\E$/) {
+					$SourcePath = _get_path_update_for_xcix($SourcePath) if defined($SourcePath);
 					$SourcePath = abs_path($SourcePath);
 					if (!defined($SourcePath) || ! -e($SourcePath)) {
 						next;
@@ -482,7 +513,7 @@ sub get_path {
 			}
 		}
 		if (!defined($Path) || ! -e($Path)) {
-			push @{$MESSAGES{$Project}}, { Hazard => 1, Severity => 'WARNING', Message => sprintf("Missing path: %s", $OrigPath) };
+			push @{$MESSAGES{$Project}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("Missing path: %s", $OrigPath) };
 			return '';
 		}
 	}
