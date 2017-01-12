@@ -83,6 +83,25 @@ for my $ProjectPath (glob("workspace/*/*.xpr")) {
 	printf "\n";
 }
 
+if (-e 'workspace/ip_repo') {
+	printf "\n";
+	printf "~"x80 ."\n";
+	printf "~~~ COPYING IP_REPO\n";
+	printf "~~~\n";
+	system('rsync',
+		'-rhtci', '--del',
+		'workspace/ip_repo/',
+		'ip_repo_sources/',
+		'--filter', 'S /*/bd',
+		'--filter', 'S /*/component.xml',
+		'--filter', 'S /*/hdl',
+		'--filter', 'S /*/xgui',
+		'--filter', 'S /*/drivers',
+		'--filter', 'H /*/*');
+	printf "~~~\n";
+	printf "\n";
+}
+
 open(DEPORDER, '>', 'projects.list');
 printf DEPORDER "%s\n", join "\n", process_deps(%PROJECT_REPO_DEPS);
 close(DEPORDER);
@@ -358,7 +377,9 @@ sub process_tcl {
 				}
 				$RepoPath = get_path($1,1,$ProjectCanonicalName,0,undef);
 				next unless ($RepoPath);
-				$RepoPath =~ s/^workspace\//sources\//;
+				if ($RepoPath !~ m!^workspace/ip_repo!) {
+					$RepoPath =~ s/^workspace\//sources\//;
+				}
 
 				if (!($RepoPath =~ m!^sources/([^/]+)(?:/.*)?$!)) {
 					push @{$MESSAGES{$ProjectCanonicalName}}, { Line => __LINE__, Hazard => 1, Severity => 'WARNING', Message => sprintf("External ip_repo_path \"%s\" will NOT be processed! Strongly consider relocating it to workspace/ip_project", $RepoPath) };
@@ -467,19 +488,14 @@ sub process_componentxml {
 sub _get_path_update_for_xcix {
 	# Vivado 2016.1 will report files as /ip/module/module.xci when they are actually packaged as /ip/module.xcix
 	my $Path = shift;
-	printf("XCIX: IN\t%s\n", $Path);
 	return $Path unless $Path =~ /\.xci$/;
-	printf("XCIX: XCI\t%s\n", $Path);
 	return $Path if -e $Path;
-	printf("XCIX: !-e\t%s\n", $Path);
 	my $AltPath = $Path;
 	$AltPath =~ s!/ip/([^/]+)/\g1\.xci!/ip/$1.xcix!;
 	return $AltPath if -e ($AltPath);
-	printf("XCIX: !-e\t%s\n", $AltPath);
 	my $SourcePath = $AltPath;
 	$SourcePath =~ s!(^|/)workspace/!$1sources/!;
 	return $AltPath if -e ($SourcePath);
-	printf("XCIX: !-e.x\t%s\n", $SourcePath);
 	return $Path;
 }
 

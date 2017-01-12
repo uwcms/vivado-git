@@ -31,6 +31,19 @@ if (!mkdir('workspace')) {
 	exit(2);
 }
 
+if (-e 'ip_repo_sources') {
+	printf "\n";
+	printf "~"x80 ."\n";
+	printf "~~~ COPYING IP_REPO\n";
+	printf "~~~\n";
+	system('rsync',
+		'-rhtci', '--del',
+		'ip_repo_sources/',
+		'workspace/ip_repo/');
+	printf "~~~\n";
+	printf "\n";
+}
+
 open(PROJECTLIST, '<', 'projects.list');
 while (my $ProjectCanonicalName = <PROJECTLIST>) {
 	chomp $ProjectCanonicalName;
@@ -86,6 +99,7 @@ while (my $ProjectCanonicalName = <PROJECTLIST>) {
 		printf "~~~\n";
 	}
 }
+
 my %MessageTotals;
 for my $ProjectCanonicalName (keys %MESSAGES) {
 	if (@{$MESSAGES{$ProjectCanonicalName}}) {
