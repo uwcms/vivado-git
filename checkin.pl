@@ -91,13 +91,7 @@ if (-e 'workspace/ip_repo') {
 	system('rsync',
 		'-rhtci', '--del',
 		'workspace/ip_repo/',
-		'ip_repo_sources/',
-		'--filter', 'S /*/bd',
-		'--filter', 'S /*/component.xml',
-		'--filter', 'S /*/hdl',
-		'--filter', 'S /*/xgui',
-		'--filter', 'S /*/drivers',
-		'--filter', 'H /*/*');
+		'ip_repo_sources/');
 	printf "~~~\n";
 	printf "\n";
 }
